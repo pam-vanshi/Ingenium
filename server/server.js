@@ -30,6 +30,7 @@ app.post('/teacher',(req,res) => {
 app.get('/teacher', (req,res) => {
   Teacher.find().then((teacher) => {
     res.send(teacher)
+    console.log("bhej di request");
   }, (e) => {
     res.status(400).send(e);
   })
