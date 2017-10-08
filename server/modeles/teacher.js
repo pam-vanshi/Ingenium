@@ -15,7 +15,7 @@ var TeacherSchema = new mongoose.Schema({
   },
   contact: {
    type: String,
-   required: true,
+   //required: true,
    minlength: 10,
    default: null,
    trim: true
@@ -25,7 +25,7 @@ var TeacherSchema = new mongoose.Schema({
     trim: true,
     minlength: 5,
     unique: true,
-    required: true,
+    //required: true,
     isAsync: true,
     validate: {
       isAsync:false,
@@ -33,7 +33,15 @@ var TeacherSchema = new mongoose.Schema({
       message: `{VALUE} is not a valid email`
     }
 
-  },tokens: [{
+  },
+  username: {
+    type: String,
+    trim: true,
+    minlength: 5,
+    required: true,
+    unique: true
+  },
+  tokens: [{
     access: {
       type: String,
       required: true
@@ -48,6 +56,7 @@ var TeacherSchema = new mongoose.Schema({
         required: true,
         minlength: 6
   }
+
 
 })
 
@@ -105,9 +114,9 @@ TeacherSchema.pre('save', function(next){
 
 })
 
-TeacherSchema.statics.findByCredentials = function (email,password){
+TeacherSchema.statics.findByCredentials = function (username,password){
   var Teacher = this;
-  return Teacher.findOne({email:email}).then((user) => {
+  return Teacher.findOne({username:username}).then((user) => {
     if(!user){ return Promise.reject()}
 
     return new Promise((resolve,reject) => {

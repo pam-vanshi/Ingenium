@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 const validator = require('validator');
 const jwt = require('jsonwebtoken')
@@ -29,7 +30,8 @@ var CentreSchema = new mongoose.Schema({
     default: null,
     trim: true
 
-  },
+  }
+
 
 
 })

@@ -3,8 +3,9 @@ const validator = require('validator');
 const jwt = require('jsonwebtoken')
 const _ = require('lodash')
 const bcrypt = require('bcryptjs')
+const Schema = mongoose.Schema
+var StudentSchema = new Schema({
 
-var StudentSchema = new mongoose.Schema({
   name: {
     type: String,
     required: true,
@@ -56,15 +57,16 @@ var StudentSchema = new mongoose.Schema({
         required: true,
         minlength: 6
   },
-  coaching: {
-    $ref: "centre",
+  coaching: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Centre'
     //$id:
 
-  }
+  }]
 
 })
 
-var Student = mongoose.model('Student', CentreSchema)
+var Student = mongoose.model('Student', StudentSchema)
 
 module.exports = {
   Student
