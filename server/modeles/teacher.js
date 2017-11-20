@@ -97,6 +97,18 @@ TeacherSchema.statics.findByToken = function(token) {
   });
 };
 
+TeacherSchema.methods.removeToken = function (token) {
+  var user = this;
+
+  return user.update({
+
+    $pull : {
+      tokens: {token}
+    }
+  });
+};
+
+
 TeacherSchema.pre('save', function(next){
   var user = this;
 

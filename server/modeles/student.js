@@ -62,9 +62,95 @@ var StudentSchema = new Schema({
     ref: 'Centre'
     //$id:
 
-  }]
+  }],
+  resetPasswordToken: String,
+  resetPasswordExpires: Date
 
 })
+
+StudentSchema.methods.toJSON = function() {
+  var user = this;
+  var userObject = user.toObject();
+
+  return _.pick(userObject, ['name','email','_id','contact'])
+}
+
+
+
+
+
+StudentSchema.methods.generateAuthToken = function () {
+  var student = this;
+  var access = 'auth'
+
+  var token = jwt.sign({_id: student._id.toHexString(), access},'abc123').toString();
+  student.tokens.push({
+    access: access,
+    token: token
+  })
+  return student.save().then(() => {
+    return token
+  })
+}
+
+StudentSchema.pre('save', function(next){
+  var user = this;
+
+  if(user.isModified('password')){
+    bcrypt.genSalt(10,(err,salt) => {
+      bcrypt.hash(user.password,salt, (err,hash) => {
+           user.password = hash;
+             next()
+      })
+    })
+
+  }else {
+    next()
+  }
+
+})
+
+
+StudentSchema.statics.findByCredentials = function (username,password){
+  var Student = this;
+  return Student.findOne({username:username}).then((student) => {
+    if(!student){ return Promise.reject()}
+
+    return new Promise((resolve,reject) => {
+      bcrypt.compare(password,student.password,(err, res) => {
+        if(res){
+          resolve(student)
+        }else {reject()}
+      })
+    })
+  })
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 var Student = mongoose.model('Student', StudentSchema)
 

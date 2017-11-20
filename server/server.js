@@ -2,162 +2,278 @@ const express = require('express')
 const bodyParser = require('body-parser')
 var {mongoose} = require('./db/mongoose.js');
 const _ = require('lodash')
-var {Teacher} = require('./modeles/teacher.js')
+var session = require('express-session')
+//var mongoose = require('mongoose');
+var nodemailer = require('nodemailer');
+var passport = require('passport');
+var LocalStrategy = require('passport-local').Strategy;
+var bcrypt = require('bcryptjs');
+var async = require('async');
+var crypto = require('crypto');
+//var express = require('express');
+//var path = require('path');
+var favicon = require('static-favicon');
+var logger = require('morgan');
+var cookieParser = require('cookie-parser');
+//var bodyParser = require('body-parser');
+var session = require('express-session')
+//var mongoose = require('mongoose');
+
 var {Student} = require('./modeles/student.js')
 var {Centre} = require('./modeles/centre.js')
 var {Subject} = require('./modeles/subject.js')
 var {Class} = require('./modeles/class.js')
-var {Batch} = require('./modeles/batch.js')
+
 var {BatchSub} = require('./modeles/batch-sub.js')
+
+var {BatchSubStudent} = require('./modeles/batch-sub-student.js')
 var {TeacherBatchSub} = require('./modeles/teacher-batch-sub.js')
-var {authenticate} = require('./middleware/authenticate');
+
 const port = process.env.PORT || 3000;
+var {Attendance} = require('./modeles/attendance.js');
+var {Notifications} = require('./modeles/notification.js');
+var gcm = require('node-gcm');
 var app = express();
-app.use(bodyParser.json())
+var flash = require('express-flash');
+var teacher  = require("./Routes/teacher.js")
+var index  = require("./Routes/index.js")
+var teacherLogin = require("./Routes/teacher-login.js")
+var teacherProfile = require("./Routes/teacher-profile.js")
+var teacherLogout = require("./Routes/teacher-logout.js")
+var studentLogin = require("./Routes/student-login.js")
+var student = require("./Routes/student.js")
+var studentFee = require("./Routes/student-fee.js")
+var centre = require("./Routes/centre.js")
+var centreBatch = require('./Routes/centre-batch.js')
+var BatchSub = require("./Routes/centre-batchsub.js")
+var BatchSubStudent = require("./Routes/batchsubstudent.js")
+var Attendance = require("./Routes/attendance.js")
+var TeacherBatchSub = require("./Routes/teacherbatchsub.js")
 
-app.listen(port, console.log(`Server is running on ${port}`))
-
-
-
-app.post('/teacher',(req,res) => {
-  var body = _.pick(req.body, ['name','email','password','contact','username'])
-  var teacher = new Teacher(body);
-
-  teacher.save().then((teacher) => {
-    return teacher.generateAuthToken()
-  }).then((token) => {
-    res.header('x-auth',token).send(teacher)
-  }).catch((e) => {
-    res.status(400).send(e);
-  })
-
-
-})
-app.get('/teacher', (req,res) => {
-  Teacher.find().then((teacher) => {
-    res.send(teacher)
-    console.log("bhej di request");
-  }, (e) => {
-    res.status(400).send(e);
-  })
-})
-
-app.get('/teacher/me',authenticate, (req,res) => {
-  res.send(req.user);
-})
-
-app.post('/teacher/login', (req, res) => {
-  var body = _.pick(req.body, ['username', 'password']);
-
-  Teacher.findByCredentials(body.username, body.password).then((user) => {
-    return user.generateAuthToken().then((token) => {
-      res.header('x-auth', token).send(user);
-    });
-  }).catch((e) => {
-    res.status(400).send();
-  });
+var userSchema = new mongoose.Schema({
+  username: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  resetPasswordToken: String,
+  resetPasswordExpires: Date
 });
 
-app.post('/teacherbatchsub',(req,res) => {
-  var body = _.pick(req.body, ['batchsubid', 'teacherid'])
-  var teacherbatchSub = new TeacherBatchSub();
-  Teacher.findById(body.teacherid).then((teacher) => {
-    teacherbatchSub.teacher.push(teacher)
-   })
-  BatchSub.findById(body.batchsubid).then((batchsub) => {
-    teacherbatchSub.batchsub.push(batchsub)
-    teacherbatchSub.save().then((teacherbatchSub) => {
-      res.send(teacherbatchSub)
-    })
-  })
+userSchema.pre('save', function(next){
+  var user = this;
 
-  })
-
-
-
-
-
-app.post('/student',(req,res) => {
-  var body = _.pick(req.body, ['name','email','password','contact','username','centre'])
-  var student = new Student(body);
-  Centre.findOne({name:body.centre}).then((centre) => {
-    student.coaching.push(centre);
-    student.save().then((student) => {
-      res.send(student)
-    });
-
-  })
-  //student.coaching.push(centre);
-
-
-
-})
-
-app.post('/centre',(req,res) => {
-  var body = _.pick(req.body, ['name','email','address','contact'])
-  var centre = new Centre(body);
-
-  centre.save().then((centre) => {
-    res.send(centre)
-  });
-})
-
-app.post('/centre/batch',(req,res) => {
-  var body = _.pick(req.body, ['centre','class','section'])
-  var batch = new Batch();
-  batch.section = body.section;
-  Class.findOne({class:body.class}).then((class1) => {
-    batch.class.push(class1)
-  })
-
-  Centre.findOne({name:body.centre}).then((centre) => {
-
-
-      batch.coaching.push(centre);
-
-      return batch.save()
-
-  }).then((batch) => {
-    res.send(batch)
-  })
-
-  })
-
-
-  app.post('/centre/batch/batchsub',(req,res) => {
-    var body = _.pick(req.body, ['subject', 'batchid'])
-    var batchSub = new BatchSub();
-    Subject.findOne({subject:body.subject}).then((subject1) => {
-      batchSub.subject.push(subject1)
-    })
-    Batch.findById(body.batchid).then((batch1) => {
-      batchSub.batch.push(batch1)
-      batchSub.save().then((batchSub) => {
-        res.send(batchSub)
+  if(user.isModified('password')){
+    bcrypt.genSalt(10,(err,salt) => {
+      bcrypt.hash(user.password,salt, (err,hash) => {
+           user.password = hash;
+             next()
       })
     })
 
-    })
+  }else {
+    next()
+  }
 
-
-
-
-
-
-app.post('/subject',(req,res) => {
-  var body = _.pick(req.body, ['subject'])
-  var subject = new Subject(body);
-
-  subject.save().then((subject) => {
-    res.send(subject)
-  });
 })
 
-app.post('/class',(req,res) => {
-  var body = _.pick(req.body, ['class'])
-  var subject = new Class(body);
-
-  subject.save().then((subject) => {
-    res.send(subject)
+userSchema.methods.comparePassword = function(candidatePassword, cb) {
+  bcrypt.compare(candidatePassword, this.password, function(err, isMatch) {
+    if (err) return cb(err);
+    cb(null, isMatch);
   });
-})
+};
+var User = mongoose.model('User', userSchema);
+
+passport.use(new LocalStrategy(function(username, password, done) {
+  User.findOne({ username: username }, function(err, user) {
+    if (err) return done(err);
+    if (!user) return done(null, false, { message: 'Incorrect username.' });
+    user.comparePassword(password, function(err, isMatch) {
+      if (isMatch) {
+        return done(null, user);
+      } else {
+        return done(null, false, { message: 'Incorrect password.' });
+      }
+    });
+  });
+}));
+passport.serializeUser(function(user, done) {
+  done(null, user.id);
+});
+
+passport.deserializeUser(function(id, done) {
+  User.findById(id, function(err, user) {
+    done(err, user);
+  });
+});
+app.use(bodyParser.json())//parses the text as json and exposes the resulting objects on req.bodyParser
+
+
+app.set('port', process.env.PORT || 3000);
+//app.set('views', path.join(__dirname, 'views'));
+//app.set('view engine', 'jade');
+app.use(favicon());
+app.use(logger('dev'));
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded());
+app.use(cookieParser());
+app.use(session({ secret: 'session secret key' }));
+app.use(flash());
+//app.use(express.static(path.join(__dirname, 'public')));
+app.use(passport.initialize());
+app.use(passport.session());
+app.use('/',index)
+app.use('/teacher',teacher);
+app.use('/teacher/login',teacherLogin);
+app.use('/teacher/me', teacherProfile)
+app.use('/teacher/me/token', teacherLogout)
+app.use('/student',student);
+app.use('/student/login', studentLogin)
+app.use('/student/fee',studentFee)
+app.use('/centre', centre)
+app.use('/centre/batch',centreBatch)
+app.use('/centre/batch/batchsub', BatchSub)
+app.use('/batchsubstudent', BatchSubStudent)
+app.use('/attend', Attendance)
+app.use('/teacherbatchsub', TeacherBatchSub)
+
+app.post('/login', function(req, res, next) {
+  passport.authenticate('local', function(err, user, info) {
+    if (err) return next(err)
+    if (!user) {
+      return res.send('this user does not exist')
+    }
+    req.logIn(user, function(err) {
+      if (err) return next(err);
+      return res.redirect('/');
+    });
+  })(req, res, next);
+});
+
+app.get('/signup', function(req, res) {
+  res.render('signup', {
+    user: req.user
+  });
+});
+
+app.post('/signup', function(req, res) {
+  var user = new User({
+      username: req.body.username,
+      email: req.body.email,
+      password: req.body.password
+    });
+
+  user.save(function(err) {
+    req.logIn(user, function(err) {
+      res.redirect('/');
+    });
+  });
+});
+
+app.get('/logout', function(req, res){
+  req.logout();
+  res.redirect('/');
+});
+app.get('/forgot', function(req, res) {
+  res.render('forgot', {
+    user: req.user
+  });
+});
+
+app.post('/forgot', function(req, res, next) {
+  async.waterfall([
+    function(done) {
+      crypto.randomBytes(20, function(err, buf) {
+        var token = buf.toString('hex');
+        done(err, token);
+      });
+    },
+    function(token, done) {
+      User.findOne({ email: req.body.email }, function(err, user) {
+        if (!user) {
+          req.flash('error', 'No account with that email address exists.');
+          return res.redirect('/forgot');
+        }
+
+        user.resetPasswordToken = token;
+        user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+
+        user.save(function(err) {
+          done(err, token, user);
+        });
+      });
+    },
+    function(token, user, done) {
+      var smtpTransport = nodemailer.createTransport({
+        service: 'SendGrid',
+        auth: {
+          user: "pramudit",
+          pass: "Pramudit@123"
+        }
+      });
+      var mailOptions = {
+        to: user.email,
+        from: 'passwordreset@demo.com',
+        subject: 'Node.js Password Reset',
+        text: 'You are receiving this because you (or someone else) have requested the reset of the password for your account.\n\n' +
+          'Please click on the following link, or paste this into your browser to complete the process:\n\n' +
+          'http://' + req.headers.host + '/reset/' + token + '\n\n' +
+          'If you did not request this, please ignore this email and your password will remain unchanged.\n'
+      };
+      smtpTransport.sendMail(mailOptions, function(err) {
+        req.flash('info', 'An e-mail has been sent to ' + user.email + ' with further instructions.');
+        done(err, 'done');
+      });
+    }
+  ], function(err) {
+    if (err) return next(err);
+    res.redirect('/forgot');
+  });
+});
+
+app.post('/reset/token', function(req, res) {
+  async.waterfall([
+    function(done) {
+      User.findOne({ resetPasswordToken: req.header('x-auth'), resetPasswordExpires: { $gt: Date.now() } }, function(err, user) {
+        if (!user) {
+          req.flash('error', 'Password reset token is invalid or has expired.');
+          return res.send('invalid');
+        }
+
+        user.password = req.body.password;
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+
+        user.save(function(err) {
+          req.logIn(user, function(err) {
+            done(err, user);
+          });
+        });
+      });
+    },
+    function(user, done) {
+      var smtpTransport = nodemailer.createTransport('SMTP', {
+        service: 'SendGrid',
+        auth: {
+          user: 'pramudit',
+          pass: 'Pramudit@123'
+        }
+      });
+      var mailOptions = {
+        to: user.email,
+        from: 'passwordreset@demo.com',
+        subject: 'Your password has been changed',
+        text: 'Hello,\n\n' +
+          'This is a confirmation that the password for your account ' + user.email + ' has just been changed.\n'
+      };
+      smtpTransport.sendMail(mailOptions, function(err) {
+        req.flash('success', 'Success! Your password has been changed.');
+        done(err);
+      });
+    }
+  ], function(err) {
+    res.redirect('/');
+  });
+});
+
+
+app.listen(port, console.log(`Server is running on ${port}`))
